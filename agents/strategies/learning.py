@@ -32,7 +32,7 @@ class LearningStrategy(Strategy):
     def get_offer(self, reservation_price: float) -> float:
         return reservation_price * (1 + self._offset)
 
-    def update(self, traded: bool, reservation_price: float) -> None:
+    def update(self, traded: bool, reservation_price: float, **context) -> None:
         if traded:
             self._offset += self.direction * self.step
         else:

@@ -6,6 +6,8 @@ import pandas as pd
 from market.trade import Trade
 from agents.agent import Agent
 from agents.strategies.learning import LearningStrategy
+from agents.strategies.zip_strategy import ZIPStrategy
+from agents.strategies.bandit_strategy import BanditStrategy
 
 
 STRATEGY_COLORS = {
@@ -14,6 +16,8 @@ STRATEGY_COLORS = {
     "conservative": "#55A868",
     "aggressive":   "#C44E52",
     "learning":     "#9467BD",
+    "zip":          "#8C564B",
+    "bandit":       "#E377C2",
 }
 
 
@@ -138,4 +142,78 @@ def plot_learning_convergence(
     ax.set_ylabel("Offer offset (fraction of reservation price)")
     ax.legend(handles=legend_elements)
     ax.grid(True, alpha=0.3)
+    _save(fig, path)
+
+
+def plot_zip_margins(
+    agents: list[Agent],
+    path: str = "plots/zip_margins.png",
+) -> None:
+    """
+    Plot how each ZIP agent's profit margin (mu) evolved.
+    Buyers and sellers should converge to different equilibrium margins.
+    """
+    from matplotlib.lines import Line2D
+
+    zip_agents = [a for a in agents if isinstance(a.strategy, ZIPStrategy)]
+    if not zip_agents:
+        print("  No ZIP agents found, skipping margin plot.")
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for agent in zip_agents:
+        history = agent.strategy.mu_history
+        if not history:
+            continue
+        color = "#8C564B" if "Buyer" in repr(agent) else "#E377C2"
+        ax.plot(history, alpha=0.5, linewidth=1.2, color=color)
+
+    legend_elements = [
+        Line2D([0], [0], color="#8C564B", label="ZIP Buyers (margin = bid discount)"),
+        Line2D([0], [0], color="#E377C2", label="ZIP Sellers (margin = ask markup)"),
+    ]
+    ax.set_title("ZIP Profit Margin (mu) Over Time", fontsize=14, fontweight="bold")
+    ax.set_xlabel("Times matched")
+    ax.set_ylabel("Profit margin mu")
+    ax.legend(handles=legend_elements)
+    ax.grid(True, alpha=0.3)
+    _save(fig, path)
+
+
+def plot_bandit_arms(
+    agents: list[Agent],
+    path: str = "plots/bandit_arms.png",
+) -> None:
+    """
+    Show which price arm each bandit agent converges to over time.
+    A flat line at a high arm index means the agent learned to bid/ask high;
+    variance indicates ongoing exploration.
+    """
+    from matplotlib.lines import Line2D
+
+    bandit_agents = [a for a in agents if isinstance(a.strategy, BanditStrategy)]
+    if not bandit_agents:
+        print("  No Bandit agents found, skipping arm plot.")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=False)
+    fig.suptitle("Bandit Agent Arm Selection Over Time", fontsize=14, fontweight="bold")
+
+    buyers  = [a for a in bandit_agents if "Buyer"  in repr(a)]
+    sellers = [a for a in bandit_agents if "Seller" in repr(a)]
+
+    for ax, group, label, color in [
+        (axes[0], buyers,  "Buyers  (high arm = aggressive bid)", "#E377C2"),
+        (axes[1], sellers, "Sellers (high arm = conservative ask)", "#E377C2"),
+    ]:
+        for agent in group:
+            ax.plot(agent.strategy.arm_history, alpha=0.5, linewidth=1.0, color=color)
+        n_arms = group[0].strategy.n_arms if group else 11
+        ax.set_ylim(-0.5, n_arms - 0.5)
+        ax.set_title(label, fontsize=10)
+        ax.set_xlabel("Times matched")
+        ax.set_ylabel("Arm index")
+        ax.grid(True, alpha=0.3)
+
     _save(fig, path)

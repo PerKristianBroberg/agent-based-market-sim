@@ -1,4 +1,4 @@
-# Multi-Agent Market Simulation
+# Agent-Based Market Simulation
 
 A from-scratch simulation of a double-auction market where autonomous agents trade goods, employ different pricing strategies, and adapt their behaviour based on outcomes.
 
@@ -11,12 +11,16 @@ Built to explore emergent market dynamics — how individual agent behaviour agg
 - **Agents** act as buyers or sellers, each with a private reservation price
 - **Trade** occurs when a buyer's offer meets or exceeds a seller's ask; price is the midpoint
 - **Strategies** determine how each agent sets its offer:
-  - `basic` — offers exactly the reservation price
-  - `random` — adds noise (±10%) to simulate imperfect information
-  - `conservative` — holds back to maximise surplus per trade
-  - `aggressive` — moves toward the other side to maximise trade frequency
-  - `learning` — adapts offer up or down based on whether the last trade succeeded
-- **Experiments** test three specific questions about market behaviour
+
+| Strategy | Description | Theory basis |
+|---|---|---|
+| `basic` | Offers exactly the reservation price | Baseline |
+| `random` | Adds ±10% noise | Imperfect information |
+| `conservative` | Holds back to maximise surplus per trade | — |
+| `aggressive` | Moves toward the other side for more trades | — |
+| `learning` | Adjusts offer ±step based on trade outcome | Feedback loop |
+| `zip` | Momentum-based update toward last market price | Cliff & Bruten (1997) |
+| `bandit` | Epsilon-greedy price arm selection, reward = profit | Sutton & Barto (2018) |
 
 ---
 
@@ -24,13 +28,17 @@ Built to explore emergent market dynamics — how individual agent behaviour agg
 
 | Strategy | Avg Profit/Agent | Trade Rate |
 |---|---|---|
-| learning | **414.65** | 20.8% |
-| basic | 290.63 | 17.9% |
-| random | 191.26 | 12.6% |
-| aggressive | 255.43 | 24.3% |
-| conservative | 154.80 | 6.4% |
+| **zip** | **378.98** | 12.2% |
+| basic | 301.43 | 17.0% |
+| random | 293.07 | 17.6% |
+| bandit | 291.18 | 19.2% |
+| aggressive | 108.76 | 17.9% |
+| conservative | 160.30 | 7.1% |
+| learning | 160.09 | 14.0% |
 
-**Learning agents earn ~43% more profit** than basic agents despite not having any privileged information — they simply adjust their bids based on past outcomes.
+**ZIP dominates** because it uses actual market transaction prices as a signal — it knows *what the market will bear*, not just whether it personally succeeded. This is the core insight from the Cliff & Bruten paper: market-level information is far more useful than individual-level feedback.
+
+**Bandit lands mid-table** — it learns which price level yields the best expected profit, but starts cold (all Q-values = 0) and spends early rounds exploring. Given more rounds it would likely converge higher.
 
 ### Experiment results
 
@@ -60,7 +68,9 @@ capstone/
 │       ├── random_strategy.py
 │       ├── conservative.py
 │       ├── aggressive.py
-│       └── learning.py           # Adaptive strategy
+│       ├── learning.py           # Feedback-loop adaptive strategy
+│       ├── zip_strategy.py       # Zero-Intelligence Plus (Cliff & Bruten 1997)
+│       └── bandit_strategy.py    # Epsilon-greedy bandit (Sutton & Barto 2018)
 │
 ├── market/
 │   ├── market.py                 # Matching engine
@@ -71,7 +81,7 @@ capstone/
 │
 ├── analysis/
 │   ├── metrics.py                # Summary statistics
-│   └── plots.py                  # Matplotlib chart functions
+│   └── plots.py                  # Matplotlib chart functions (6 plots)
 │
 ├── experiments/
 │   ├── learning_vs_static.py     # Experiment 1
@@ -97,10 +107,10 @@ python -m venv .venv
 ## Run
 
 ```bash
-# Main simulation (1000 rounds, mixed strategies, outputs plots/)
+# Main simulation (1000 rounds, all 7 strategies, outputs plots/)
 .venv/Scripts/python main.py
 
-# All experiments with individual plots
+# All three experiments
 .venv/Scripts/python run_experiments.py
 ```
 
@@ -109,13 +119,28 @@ python -m venv .venv
 ## Design decisions
 
 **Strategy pattern (composition over inheritance)**
-Strategies are injected into agents rather than subclassed. This means any strategy can be paired with any agent type, and new strategies can be added without touching existing code.
+Strategies are injected into agents at construction. Any strategy can be paired with any agent type, and new strategies require zero changes to existing code.
 
-**Minimal learning rule**
-The learning agent uses a single floating offset on its reservation price, adjusted ±5% per round based on trade outcome. No ML library required — the emergent behaviour comes purely from this simple feedback loop.
+**Market context propagation**
+The `Strategy.update()` method receives `**context` including the last transaction price. This enables market-aware strategies (ZIP) without coupling static strategies to unnecessary data.
 
-**Separation of concerns**
-Agent logic (what to offer) is fully decoupled from market logic (how to match). The `Market` class only knows agents can produce offers and receive outcomes — it doesn't know anything about strategies.
+**ZIP learning rule**
+Uses the Widrow-Hoff delta rule with momentum:
+```
+delta     = learning_rate * (target_price - current_offer)
+new_offer = current_offer + momentum * last_delta + delta
+```
+The target is derived from the last observed market transaction, with small random perturbations to prevent lock-in.
+
+**Bandit reward signal**
+Rather than using 0/1 (traded/not), the bandit uses actual profit as its reward. This prevents convergence to the most aggressive arm (which trades most but earns least) and instead finds the arm that maximises expected surplus.
+
+---
+
+## References
+
+- Cliff, D. & Bruten, J. (1997). *Zero is not enough: On the lower limit of agent intelligence for continuous double auction markets.* HP Laboratories Technical Report HPL-97-141.
+- Sutton, R. S. & Barto, A. G. (2018). *Reinforcement Learning: An Introduction* (2nd ed.), Chapter 2. MIT Press.
 
 ---
 
@@ -123,5 +148,6 @@ Agent logic (what to offer) is fully decoupled from market logic (how to match).
 
 - Order book market instead of random matching
 - Multi-good markets with substitutes
+- UCB (Upper Confidence Bound) bandit variant
 - Agent memory decay (older outcomes weighted less)
 - Network effects (agents observe neighbours' trades)

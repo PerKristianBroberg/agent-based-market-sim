@@ -16,6 +16,7 @@ class Market:
         self.buyers = buyers
         self.sellers = sellers
         self.trade_history: list[Trade] = []
+        self.last_trade_price: Optional[float] = None
 
     def run_round(self, round_number: int) -> Optional[Trade]:
         buyer = random.choice(self.buyers)
@@ -23,6 +24,8 @@ class Market:
 
         buyer_offer = buyer.get_offer()
         seller_offer = seller.get_offer()
+
+        context = {"last_price": self.last_trade_price}
 
         if buyer_offer >= seller_offer:
             price = (buyer_offer + seller_offer) / 2
@@ -37,10 +40,11 @@ class Market:
             buyer.record_trade(price)
             seller.record_trade(price)
             self.trade_history.append(trade)
-            buyer.on_round_end(traded=True)
-            seller.on_round_end(traded=True)
+            self.last_trade_price = price
+            buyer.on_round_end(traded=True,  trade_price=price, **context)
+            seller.on_round_end(traded=True,  trade_price=price, **context)
             return trade
 
-        buyer.on_round_end(traded=False)
-        seller.on_round_end(traded=False)
+        buyer.on_round_end(traded=False, **context)
+        seller.on_round_end(traded=False, **context)
         return None

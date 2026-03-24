@@ -11,8 +11,14 @@ class Strategy(ABC):
     def get_offer(self, reservation_price: float) -> float:
         pass
 
-    def update(self, traded: bool, reservation_price: float) -> None:
-        """Called after each round this agent was matched. Override in learning strategies."""
+    def update(self, traded: bool, reservation_price: float, **context) -> None:
+        """
+        Called after each round this agent was matched.
+        context may include:
+          trade_price   — actual transaction price (if traded)
+          last_price    — most recent market trade price (always)
+        Override in learning strategies.
+        """
         pass
 
     @property
